@@ -56,7 +56,9 @@ export function AddScreen({
 }) {
   const [rows, setRows] = useState<Row[]>([])
   const [busy, setBusy] = useState(false)
+  const [picking, setPicking] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const native = isNativeApp()
 
   async function handleFiles(files: FileList | null) {
     if (!files?.length) return
@@ -73,6 +75,33 @@ export function AddScreen({
       await processRow(row)
     }
     setBusy(false)
+  }
+
+  /** 原生拍照/选相册。Web 走 hidden input，这条路不会进来。 */
+  async function handleNativePick(source: 'camera' | 'photos') {
+    if (picking) return
+    setPicking(true)
+    try {
+      const picked = await pickNativeImages(source)
+      if (picked.length === 0) return // 用户取消
+      const next: Row[] = picked.map(({ file, preview }) => ({
+        key: `${file.name}-${file.size}-${Math.random().toString(36).slice(2, 8)}`,
+        file,
+        preview,
+        stage: 'queued',
+      }))
+      setRows((r) => [...next, ...r])
+      setBusy(true)
+      for (const row of next) {
+        await processRow(row)
+      }
+      setBusy(false)
+    } catch (e) {
+      setRows((rs) => rs) // 不改状态，让下面的提示走 toast 一样的路子
+      console.error('[拍照失败]', e)
+    } finally {
+      setPicking(false)
+    }
   }
 
   async function processRow(row: Row) {

@@ -98,8 +98,9 @@ jobs:
         run: |
           SRC=android/app/build/outputs/apk/debug/app-debug.apk
           test -f "$SRC" || { echo "没找到 APK"; exit 1; }
-          # 带上报文短 SHA，方便区分不同构建
-          NAME="衣柜-${GITHUB_SHA::7}.apk"
+          # 带报文短 SHA，方便区分不同构建。
+          # 文件名用纯英文：Release 附件上传时中文会被丢掉，只剩 "-f00bee5.apk"。
+          NAME="wardrobe-${GITHUB_SHA::7}.apk"
           cp "$SRC" "$NAME"
           echo "size=$(du -h "$NAME" | cut -f1)" >> "$GITHUB_OUTPUT"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
