@@ -10,6 +10,12 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+# GitHub 从 2023 年起把新仓库的 GITHUB_TOKEN 默认设成只读，
+# 打 tag 要创建 Release 就必须显式要 contents: write，
+# 否则「发布 Release」那步会 403（2026-11-11 首次实测踩到了）。
+permissions:
+  contents: write
+
 # 同一分支的新提交会取消还在跑的旧任务，省额度也省等待
 concurrency:
   group: apk-${{ github.ref }}
