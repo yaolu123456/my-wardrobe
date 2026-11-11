@@ -38,4 +38,24 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      相机与相册（@capacitor/camera）。
+
+      CAMERA：拍照。插件会在第一次调用时自己弹权限请求。
+      READ_MEDIA_IMAGES：Android 13+ 读相册。
+      READ_EXTERNAL_STORAGE：Android 12 及以下读相册，用 maxSdkVersion 限住，
+        否则新系统上会多要一个没用的权限。
+
+      required="false" 是必须的 —— 声明成必需的话，没有摄像头的设备
+      （部分平板、模拟器）会直接装不上。
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 </manifest>

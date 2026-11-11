@@ -6,6 +6,7 @@ import { uploadImage } from '@/lib/data'
 import type { ItemTags } from '@/lib/tagging'
 import { CATEGORY_LABEL } from '@/lib/display'
 import { ItemEditor, fromEditable, toEditable, type EditableItem } from './ItemEditor'
+import { isNativeApp, pickNativeImages } from '@/lib/imagePicker'
 
 type Stage = 'queued' | 'uploading' | 'tagging' | 'ready' | 'error'
 
@@ -56,7 +57,8 @@ export function AddScreen({
 }) {
   const [rows, setRows] = useState<Row[]>([])
   const [busy, setBusy] = useState(false)
-  const [picking, setPicking] = useState(false)
+  // 记录正在打开的是相机还是相册，用来显示准确的提示文案
+  const [picking, setPicking] = useState<'camera' | 'photos' | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const native = isNativeApp()
 
@@ -80,7 +82,7 @@ export function AddScreen({
   /** 原生拍照/选相册。Web 走 hidden input，这条路不会进来。 */
   async function handleNativePick(source: 'camera' | 'photos') {
     if (picking) return
-    setPicking(true)
+    setPicking(source)
     try {
       const picked = await pickNativeImages(source)
       if (picked.length === 0) return // 用户取消
@@ -97,10 +99,10 @@ export function AddScreen({
       }
       setBusy(false)
     } catch (e) {
-      setRows((rs) => rs) // 不改状态，让下面的提示走 toast 一样的路子
-      console.error('[拍照失败]', e)
+      // 不改状态，原始错误留给控制台；界面上不弹英文报错
+      console.error('[选取图片失败]', e)
     } finally {
-      setPicking(false)
+      setPicking(null)
     }
   }
 
@@ -171,14 +173,47 @@ export function AddScreen({
         onChange={(e) => handleFiles(e.target.files)}
       />
 
-      <button
-        onClick={() => inputRef.current?.click()}
-        className="w-full rounded-2xl border-2 border-dashed border-[#cfc9bf] bg-card py-9 text-center active:bg-accentSoft active:border-accent transition"
-      >
-        <div className="text-3xl mb-2">📷</div>
-        <div className="text-sm font-semibold">拍照 / 选择照片</div>
-        <div className="text-xs text-ink3 mt-1.5">支持一次选多张 · 自动压缩 · 后台识别</div>
-      </button>
+      {native ? (
+        // 原生：分开两个入口。Camera 插件一次只返回一张，
+        // 但拍衣服本来就是一件一张，反而不容易拍糊。
+        <div className="grid grid-cols-2 gap-2.5">
+          <button
+            onClick={() => handleNativePick('camera')}
+            disabled={picking !== null}
+            className="rounded-2xl border-2 border-dashed border-[#cfc9bf] bg-card py-7 text-center
+                       active:bg-accentSoft active:border-accent transition disabled:opacity-50"
+          >
+            <div className="text-2xl mb-1.5">📷</div>
+            <div className="text-sm font-semibold">拍照</div>
+            <div className="text-[11px] text-ink3 mt-1">调系统相机</div>
+          </button>
+          <button
+            onClick={() => handleNativePick('photos')}
+            disabled={picking !== null}
+            className="rounded-2xl border-2 border-dashed border-[#cfc9bf] bg-card py-7 text-center
+                       active:bg-accentSoft active:border-accent transition disabled:opacity-50"
+          >
+            <div className="text-2xl mb-1.5">🖼️</div>
+            <div className="text-sm font-semibold">从相册选</div>
+            <div className="text-[11px] text-ink3 mt-1">已有照片</div>
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => inputRef.current?.click()}
+          className="w-full rounded-2xl border-2 border-dashed border-[#cfc9bf] bg-card py-9 text-center active:bg-accentSoft active:border-accent transition"
+        >
+          <div className="text-3xl mb-2">📷</div>
+          <div className="text-sm font-semibold">拍照 / 选择照片</div>
+          <div className="text-xs text-ink3 mt-1.5">支持一次选多张 · 自动压缩 · 后台识别</div>
+        </button>
+      )}
+
+      {picking && (
+        <div className="mt-2 text-center text-xs text-ink3">
+          {picking === 'camera' ? '正在打开相机…' : '正在打开相册…'}
+        </div>
+      )}
 
       <div className="mt-4 rounded-xl bg-[#fffdf6] border border-[#efe7d2] px-4 py-3">
         <h4 className="text-xs font-bold text-warn mb-1.5 tracking-wide">
@@ -249,19 +284,15 @@ function RowCard({
   return (
     <div className="rounded-xl bg-card border border-line p-2.5">
       <div className="flex gap-3 items-center">
-        <div
-          className="w-12 h-14 rounded-lg shrink-0 grid place-items-center overflow-hidden relative"
-          style={{ background: draft ? tintOfLocal(draft.color_hex) : '#f4f2ee' }}
-        >
-          {row.stage === 'ready' && draft ? (
-            <span
-              className="w-5 h-5 rounded-[5px] shadow-[inset_0_-5px_10px_rgba(0,0,0,.18)]"
-              style={{ background: draft.color_hex }}
-            />
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={row.preview} alt="" className="w-full h-full object-cover" />
-          )}
+        {/*
+          缩略图一律显示用户拍的原图。
+          之前没打标结果时会退到"色块占位"，结果用户拍完照看到的是一个灰方块，
+          完全认不出是哪件 —— 照片本身就是最有信息量的东西，没必要用色块替代。
+          色块留给详情页做配色示意。
+        */}
+        <div className="w-12 h-14 rounded-lg shrink-0 overflow-hidden relative bg-[#f4f2ee]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={row.preview} alt="" className="w-full h-full object-cover" />
         </div>
 
         <div className="flex-1 min-w-0">
@@ -325,11 +356,3 @@ function RowCard({
   )
 }
 
-function tintOfLocal(hex: string): string {
-  const h = hex.replace('#', '')
-  const r = parseInt(h.slice(0, 2), 16)
-  const g = parseInt(h.slice(2, 4), 16)
-  const b = parseInt(h.slice(4, 6), 16)
-  const mix = (c: number) => Math.round(c * 0.12 + 248 * 0.88)
-  return `rgb(${mix(r)},${mix(g)},${mix(b)})`
-}
