@@ -1,0 +1,18 @@
+{
+  "name": "衣柜 · 今天穿什么",
+  "short_name": "衣柜",
+  "description": "把衣柜数字化，每天早上直接给你三套",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f4f1",
+  "theme_color": "#f6f4f1",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
