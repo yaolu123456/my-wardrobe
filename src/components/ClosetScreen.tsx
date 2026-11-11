@@ -2,52 +2,97 @@
 
 import { useMemo, useState } from 'react'
 import Image from 'next/image'
-import type { Item } from '@/lib/types'
+import type { Gender, Item } from '@/lib/types'
 import { CATEGORY_LABEL, CATEGORY_ORDER, itemMeta, wearLabel, sleepingDays } from '@/lib/display'
 import { tintOf } from './OutfitCard'
+
+const GENDER_OPTIONS: { value: Gender | null; label: string }[] = [
+  { value: null, label: '不限' },
+  { value: 'men', label: '男装' },
+  { value: 'women', label: '女装' },
+]
 
 export function ClosetScreen({
   items,
   today,
+  gender,
+  onGenderChange,
   onOpen,
   onUpload,
 }: {
   items: Item[]
   today: string
+  /** 性别筛选。和今日页共用同一个偏好，切了那边这边也跟着变 */
+  gender?: Gender | null
+  onGenderChange?: (g: Gender | null) => void
   onOpen: (item: Item) => void
   onUpload: () => void
 }) {
   const [cat, setCat] = useState<Item['category'] | 'all'>('all')
 
-  const counts = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const i of items) m.set(i.category, (m.get(i.category) ?? 0) + 1)
-    return m
-  }, [items])
-
-  const shown = useMemo(
-    () => (cat === 'all' ? items : items.filter((i) => i.category === cat)),
-    [items, cat],
+  /**
+   * 先按性别筛一遍，后面的类目计数和列表都基于这批。
+   * 不这么做的话会出现「全部 50」但列表只有 15 件的矛盾。
+   * 中性款两种视角都算 —— 它们本来就是谁都能穿。
+   */
+  const byGender = useMemo(
+    () =>
+      gender ? items.filter((i) => i.gender === gender || i.gender === 'unisex') : items,
+    [items, gender],
   )
 
-  const neverWorn = items.filter((i) => i.times_worn === 0).length
+  const counts = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const i of byGender) m.set(i.category, (m.get(i.category) ?? 0) + 1)
+    return m
+  }, [byGender])
+
+  const shown = useMemo(
+    () => (cat === 'all' ? byGender : byGender.filter((i) => i.category === cat)),
+    [byGender, cat],
+  )
+
+  const shownNeverWorn = shown.filter((i) => i.times_worn === 0).length
+  /** 有筛选时才显示筛选结果，否则放任和顶部重复的件数没意义 */
+  const filtering = (gender ?? null) !== null || cat !== 'all'
 
   return (
     <div>
-      <div className="mb-3">
-        <h2 className="text-[15px] font-semibold">
-          {items.length} 件
-          {neverWorn > 0 && (
-            <span className="text-ink3 font-normal text-[12px]">
-              {' '}· {neverWorn} 件从未穿过
-            </span>
-          )}
-        </h2>
-      </div>
+      {filtering && (
+        <p className="text-[12px] text-ink3 mb-2.5">
+          筛出 {shown.length} 件
+          {shownNeverWorn > 0 && ` · ${shownNeverWorn} 件从未穿过`}
+        </p>
+      )}
+
+      {onGenderChange && (
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-[11px] text-ink3 shrink-0">看</span>
+          <div className="flex gap-1.5">
+            {GENDER_OPTIONS.map((opt) => {
+              const active = (gender ?? null) === opt.value
+              return (
+                <button
+                  key={opt.label}
+                  onClick={() => onGenderChange(opt.value)}
+                  className={`rounded-pill px-3 py-1 text-[12px] border transition active:scale-95 ${
+                    active
+                      ? 'bg-accent text-white border-accent'
+                      : 'bg-card text-ink2 border-line'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+          {gender && <span className="text-[11px] text-ink3">· 含中性款</span>}
+        </div>
+      )}
 
       <div className="flex gap-2 overflow-x-auto no-scrollbar pb-3">
         <Chip active={cat === 'all'} onClick={() => setCat('all')}>
-          全部 {items.length}
+          全部 {byGender.length}
         </Chip>
         {CATEGORY_ORDER.map((c) => {
           const n = counts.get(c) ?? 0

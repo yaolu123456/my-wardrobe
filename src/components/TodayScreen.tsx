@@ -18,11 +18,19 @@ import { OccasionChips, OutfitCard, type RecommendedOutfit } from './OutfitCard'
 
 const WEEK_LABEL = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日']
 
+const GENDER_OPTIONS: { value: Gender | null; label: string }[] = [
+  { value: null, label: '不限' },
+  { value: 'men', label: '男装' },
+  { value: 'women', label: '女装' },
+]
+
 interface Props {
   items: Item[]
   recent: RecentWear
   /** 用户性别偏好；传 null 表示不按性别过滤 */
   gender?: Gender | null
+  /** 传了才显示性别选择器（今日页要，其他页不要） */
+  onGenderChange?: (g: Gender | null) => void
   onLogWear: (outfit: RecommendedOutfit, occasion: Occasion, temp: number) => Promise<void>
   onDislike: (outfit: RecommendedOutfit) => void
   onLike: (outfit: RecommendedOutfit) => void
@@ -32,6 +40,7 @@ export function TodayScreen({
   items,
   recent,
   gender = null,
+  onGenderChange,
   onLogWear,
   onDislike,
   onLike,
@@ -216,6 +225,37 @@ export function TodayScreen({
         }}
         autoGuessed={touched ? '已手动切换' : autoLabel}
       />
+
+      {/*
+        性别筛选放在这里，而不是挤在右上角做个小标签。
+        原来那个 11px 的小胶囊看起来像个状态标记，用户根本不知道能点。
+      */}
+      {onGenderChange && (
+        <div className="flex items-center gap-2 mb-3 -mt-1">
+          <span className="text-[11px] text-ink3 shrink-0">看</span>
+          <div className="flex gap-1.5">
+            {GENDER_OPTIONS.map((opt) => {
+              const active = (gender ?? null) === opt.value
+              return (
+                <button
+                  key={opt.label}
+                  onClick={() => onGenderChange(opt.value)}
+                  className={`rounded-pill px-3 py-1 text-[12px] border transition active:scale-95 ${
+                    active
+                      ? 'bg-accent text-white border-accent'
+                      : 'bg-card text-ink2 border-line'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+          {gender && (
+            <span className="text-[11px] text-ink3">· 中性款也包含</span>
+          )}
+        </div>
+      )}
 
       {loading && <SkeletonList />}
 

@@ -491,18 +491,8 @@ export function AppShell() {
             </div>
           </div>
           <div className="flex items-center gap-2 mb-1">
-            {/* 性别偏好：只影响推荐，不改变已有数据 */}
-            <button
-              onClick={() => setGender(gender === 'men' ? 'women' : gender === 'women' ? null : 'men')}
-              title="切换男装/女装（只看自己的 + 中性款）"
-              className={`text-[11px] rounded-full px-2 py-0.5 border transition ${
-                gender
-                  ? 'border-accent text-accent bg-accentSoft'
-                  : 'border-line text-ink3'
-              }`}
-            >
-              {gender === 'men' ? '男装' : gender === 'women' ? '女装' : '不限'}
-            </button>
+            {/* 性别切换移到了今日页的场合筛选下面 —— 这里原来的小胶囊太小，
+                用户基本发现不了。其他 tab 不需要它，性别只影响推荐。 */}
             {demo ? (
               <button
                 onClick={exitDemo}
@@ -534,6 +524,7 @@ export function AppShell() {
             items={items}
             recent={recent}
             gender={gender}
+            onGenderChange={setGender}
             onLogWear={handleLogWear}
             onDislike={handleDislike}
             onLike={handleLike}
@@ -543,6 +534,8 @@ export function AppShell() {
           <ClosetScreen
             items={items}
             today={today}
+            gender={gender}
+            onGenderChange={setGender}
             onOpen={setOpen}
             onUpload={() => setTab('add')}
           />
