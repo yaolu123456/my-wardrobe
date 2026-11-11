@@ -6,7 +6,7 @@ import { uploadImage } from '@/lib/data'
 import type { ItemTags } from '@/lib/tagging'
 import { CATEGORY_LABEL } from '@/lib/display'
 import { ItemEditor, fromEditable, toEditable, type EditableItem } from './ItemEditor'
-import { isNativeApp, pickNativeImages } from '@/lib/imagePicker'
+import { isNativeApp, pickNativeImages, GALLERY_LIMIT } from '@/lib/imagePicker'
 
 type Stage = 'queued' | 'uploading' | 'tagging' | 'ready' | 'error'
 
@@ -195,7 +195,7 @@ export function AddScreen({
           >
             <div className="text-2xl mb-1.5">🖼️</div>
             <div className="text-sm font-semibold">从相册选</div>
-            <div className="text-[11px] text-ink3 mt-1">已有照片</div>
+            <div className="text-[11px] text-ink3 mt-1">最多 {GALLERY_LIMIT} 张</div>
           </button>
         </div>
       ) : (
