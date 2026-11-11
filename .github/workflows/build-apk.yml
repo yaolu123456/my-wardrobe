@@ -1,0 +1,144 @@
+name: 打包 APK
+
+# 什么时候跑：
+#   - push 到 main：出一版可下载的 APK（挂 30 天）
+#   - 打 tag（v1.0.0 这种）：额外创建一个 Release，APK 永久挂在 Release 下
+#   - 手动点按钮：想随时出一版就点
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+# 同一分支的新提交会取消还在跑的旧任务，省额度也省等待
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 构建 debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 取出代码
+        uses: actions/checkout@v4
+
+      - name: 装 Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: 装 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 装 Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0 platform-tools'
+
+      - name: 缓存 Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: false
+
+      - name: 装依赖
+        run: npm ci
+
+      # 出包前先过质量门禁，别把编译不过的代码打成 APK
+      - name: 类型检查
+        run: npm run lint
+
+      - name: 单元测试
+        run: npm run test
+
+      # 本机把 wrapper 指向了腾讯云镜像（国内直连 services.gradle.org 会超时），
+      # 但 GitHub 的 runner 在国外，回到官方源反而更快更稳。
+      - name: Gradle wrapper 切回官方源
+        run: |
+          sed -i 's|https://mirrors.cloud.tencent.com/gradle/|https://services.gradle.org/distributions/|' \
+            android/gradle/wrapper/gradle-wrapper.properties
+          grep distributionUrl android/gradle/wrapper/gradle-wrapper.properties
+
+      # 静态导出不支持 Route Handler，先把 api 目录挪开，构建完再放回来。
+      # 客户端侧的降级在 recommendClient.ts / weatherClient.ts 里已经处理好了。
+      - name: 构建静态站点
+        run: |
+          mv src/app/api src/app/_api_backup
+          BUILD_STATIC=1 npm run build
+          mv src/app/_api_backup src/app/api
+
+      - name: 确认静态产物
+        run: |
+          test -f out/index.html || { echo "没有生成 out/index.html"; exit 1; }
+          echo "out/ 里 $(find out -type f | wc -l) 个文件，$(du -sh out | cut -f1)"
+
+      - name: 同步到 Android 工程
+        run: npx cap sync android
+
+      - name: 编译 APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --console=plain
+
+      - name: 重命名并检查产物
+        id: apk
+        run: |
+          SRC=android/app/build/outputs/apk/debug/app-debug.apk
+          test -f "$SRC" || { echo "没找到 APK"; exit 1; }
+          # 带上报文短 SHA，方便区分不同构建
+          NAME="衣柜-${GITHUB_SHA::7}.apk"
+          cp "$SRC" "$NAME"
+          echo "size=$(du -h "$NAME" | cut -f1)" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "path=$PWD/$NAME" >> "$GITHUB_OUTPUT"
+          # 打出来确认包名和版本没跑偏
+          $ANDROID_HOME/build-tools/34.0.0/aapt dump badging "$NAME" \
+            | grep -E "^package:|^sdkVersion|^targetSdkVersion|application-label:"
+
+      - name: 上传 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: wardrobe-apk-${{ github.sha }}
+          path: ${{ steps.apk.outputs.path }}
+          retention-days: 30
+          if-no-files-found: error
+
+      # 只有打 tag 时才创建 Release，平时 push 只留 artifact
+      - name: 发布 Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.apk.outputs.path }}
+          name: 衣柜 ${{ github.ref_name }}
+          body: |
+            自动构建的 Android 安装包。
+
+            - 提交：`${{ github.sha }}`
+            - 大小：${{ steps.apk.outputs.size }}
+            - 最低系统：Android 5.1（API 22）
+            - 签名：debug（能装能用，不能上架应用商店）
+
+            安装前需要在手机上允许「安装未知来源应用」。
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 汇总
+        run: |
+          echo "### APK 打好了 :package:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 项 | 值 |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 文件 | \`${{ steps.apk.outputs.name }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 大小 | ${{ steps.apk.outputs.size }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 提交 | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "往下翻到 **Artifacts** 下载。" >> "$GITHUB_STEP_SUMMARY"
